@@ -32,3 +32,6 @@
 #define WS2812_SPI_DIVISOR          16  
 #define WS2812_SPI_USE_CIRCULAR_BUFFER
 
+
+/* Old-style SPI define for this QMK fork */
+#define WS2812_SPI SPID2

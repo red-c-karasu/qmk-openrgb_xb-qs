@@ -39,20 +39,20 @@ typedef union {
 keyboard_config_t keyboard_config;
 
 void kvm_switch(bool pc_num){
-    gpio_write_pin_high(GPIO_KM_OE);
-    gpio_write_pin_low(GPIO_KM_PWEN);
-    if (!pc_num) gpio_write_pin_low(GPIO_KM_SEL);
-    else   gpio_write_pin_high(GPIO_KM_SEL);
-    gpio_write_pin_low(GPIO_KM_OE);
+    writePinHigh(GPIO_KM_OE);
+    writePinLow(GPIO_KM_PWEN);
+    if (!pc_num) writePinLow(GPIO_KM_SEL);
+    else   writePinHigh(GPIO_KM_SEL);
+    writePinLow(GPIO_KM_OE);
 
     kvm_timer = timer_read();
     kvm_sel_on = true;
 }
 
 void keyboard_pre_init_kb(void) {
-    gpio_set_pin_output(GPIO_KM_OE);       // H/W power on default = 0
-    gpio_set_pin_output(GPIO_KM_SEL);      // H/W power on default = 0
-    gpio_set_pin_output(GPIO_KM_PWEN);     // H/W power on default = 1
+    setPinOutput(GPIO_KM_OE);       // H/W power on default = 0
+    setPinOutput(GPIO_KM_SEL);      // H/W power on default = 0
+    setPinOutput(GPIO_KM_PWEN);     // H/W power on default = 1
 
     keyboard_pre_init_user();
 }
@@ -171,7 +171,7 @@ void housekeeping_task_kb(void) {
 
     if (kvm_sel_on == true){
         if (timer_elapsed(kvm_timer) > kvm_deadtime ) {
-            gpio_write_pin_high(GPIO_KM_PWEN);
+            writePinHigh(GPIO_KM_PWEN);
             kvm_sel_on = false;                             //// 키보드 리셋이 필요?
         }
     }
@@ -186,7 +186,7 @@ void housekeeping_task_kb(void) {
     if (INIT3S_led_on == true){
         if(timer_elapsed(INIT3S_timer) > 2000){
             eeconfig_init();
-            soft_reset_keyboard();
+            reset_keyboard();
         }
     }
 
