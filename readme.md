@@ -8,6 +8,21 @@
 
 This is a keyboard firmware based on the [tmk\_keyboard firmware](https://github.com/tmk/tmk_keyboard) with some useful features for Atmel AVR and ARM controllers, and more specifically, the [OLKB product line](https://olkb.com), the [ErgoDox EZ](https://ergodox-ez.com) keyboard, and the Clueboard product line.
 
+
+
+
+
+# Special Fork for the Pulsar XBOARD QS firmware using references taken from https://github.com/skylupin03/qmk_firmware/tree/add_pulsar
+
+
+
+
+
+
+
+
+
+
 ## Documentation
 
 * [See the official documentation on docs.qmk.fm](https://docs.qmk.fm)
