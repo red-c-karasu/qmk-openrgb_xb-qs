@@ -40,131 +40,295 @@
 #endif
 
 RGB                  g_openrgb_direct_mode_colors[RGB_MATRIX_LED_COUNT] = {[0 ... RGB_MATRIX_LED_COUNT - 1] = {OPENRGB_DIRECT_MODE_STARTUP_GREEN, OPENRGB_DIRECT_MODE_STARTUP_RED, OPENRGB_DIRECT_MODE_STARTUP_BLUE}};
-static const uint8_t openrgb_rgb_matrix_effects_indexes[]           = {
-    1,  2,
+
+/*
+ * Protocol translation layer.
+ *
+ * The OpenRGB host assigns sequential counter values (1, 2, 3, ...) to modes
+ * in its fixed constructor order. The counter value is what gets sent back to
+ * the firmware via set_mode. The host also uses find() on the enabled_modes
+ * list to check for specific protocol IDs (from its Modes enum).
+ *
+ * Problem: This firmware has three extra effects (PIXEL_RAIN, PIXEL_FLOW,
+ * PIXEL_FRACTAL) inserted at firmware enum positions 28-30, shifting all
+ * subsequent firmware enum values +3 compared to what the host expects.
+ * OPENRGB_DIRECT moved from what would be position 42 to position 45.
+ *
+ * Solution: This table maps between host protocol IDs and actual firmware
+ * enum values. Table order MUST match the host's constructor order so that
+ * table index+1 == the counter value the host assigns.
+ *
+ * Firmware enum (from rgb_matrix_effects.inc compile order):
+ *   1  = SOLID_COLOR             17 = CYCLE_OUT_IN_DUAL
+ *   2  = ALPHAS_MODS             18 = CYCLE_PINWHEEL
+ *   3  = GRADIENT_UP_DOWN        19 = CYCLE_SPIRAL
+ *   4  = GRADIENT_LEFT_RIGHT     20 = DUAL_BEACON
+ *   5  = BREATHING               21 = RAINBOW_BEACON
+ *   6  = BAND_SAT                22 = RAINBOW_PINWHEELS
+ *   7  = BAND_VAL                23 = RAINDROPS
+ *   8  = BAND_PINWHEEL_SAT       24 = JELLYBEAN_RAINDROPS
+ *   9  = BAND_PINWHEEL_VAL       25 = HUE_BREATHING
+ *   10 = BAND_SPIRAL_SAT         26 = HUE_PENDULUM
+ *   11 = BAND_SPIRAL_VAL         27 = HUE_WAVE
+ *   12 = CYCLE_ALL               28 = PIXEL_RAIN        (no host support)
+ *   13 = CYCLE_LEFT_RIGHT        29 = PIXEL_FLOW        (no host support)
+ *   14 = CYCLE_UP_DOWN           30 = PIXEL_FRACTAL     (no host support)
+ *   15 = RAINBOW_MOVING_CHEVRON  31 = TYPING_HEATMAP
+ *   16 = CYCLE_OUT_IN            32 = DIGITAL_RAIN
+ *                                33-44 = reactive/splash effects
+ *                                45 = OPENRGB_DIRECT
+ */
+typedef struct {
+    uint8_t protocol_id;     /* value the host looks for via find() in enabled_modes */
+    uint8_t firmware_value;  /* actual value for rgb_matrix_mode()                   */
+} protocol_mode_entry;
+
+static const protocol_mode_entry openrgb_mode_map[] = {
+    /*  Table is in HOST CONSTRUCTOR ORDER.                              */
+    /*  { host_enum_value, firmware_enum_value }                         */
+
+    /* 1. SOLID_COLOR — always enabled */
+    { 2,  1  },
 
 #ifndef DISABLE_RGB_MATRIX_ALPHAS_MODS
-    3,
+    /* 2. ALPHA_MOD */
+    { 3,  2  },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_GRADIENT_UP_DOWN
-    4,
+    /* 3. GRADIENT_UP_DOWN */
+    { 4,  3  },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_GRADIENT_LEFT_RIGHT
-    5,
+    /* 4. GRADIENT_LEFT_RIGHT */
+    { 5,  4  },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_BREATHING
-    6,
+    /* 5. BREATHING */
+    { 6,  5  },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_BAND_SAT
-    7,
+    /* 6. BAND_SAT */
+    { 7,  6  },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_BAND_VAL
-    8,
+    /* 7. BAND_VAL */
+    { 8,  7  },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_BAND_PINWHEEL_SAT
-    9,
+    /* 8. BAND_PINWHEEL_SAT */
+    { 9,  8  },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_BAND_PINWHEEL_VAL
-    10,
+    /* 9. BAND_PINWHEEL_VAL */
+    { 10, 9  },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_BAND_SPIRAL_SAT
-    11,
+    /* 10. BAND_SPIRAL_SAT */
+    { 11, 10 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_BAND_SPIRAL_VAL
-    12,
+    /* 11. BAND_SPIRAL_VAL */
+    { 12, 11 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_CYCLE_ALL
-    13,
+    /* 12. CYCLE_ALL */
+    { 13, 12 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_CYCLE_LEFT_RIGHT
-    14,
+    /* 13. CYCLE_LEFT_RIGHT */
+    { 14, 13 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_CYCLE_UP_DOWN
-    15,
+    /* 14. CYCLE_UP_DOWN */
+    { 15, 14 },
 #endif
+
+    /* NOTE: Host constructor order differs from firmware enum order here.
+     * Host: CYCLE_OUT_IN, CYCLE_OUT_IN_DUAL, RAINBOW_MOVING_CHEVRON
+     * Firmware: RAINBOW_MOVING_CHEVRON(15), CYCLE_OUT_IN(16), CYCLE_OUT_IN_DUAL(17)
+     * The translation table corrects this so mode names match visuals. */
+
 #ifndef DISABLE_RGB_MATRIX_CYCLE_OUT_IN
-    16,
+    /* 15. CYCLE_OUT_IN — host enum 16, firmware enum 16 */
+    { 16, 16 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_CYCLE_OUT_IN_DUAL
-    17,
+    /* 16. CYCLE_OUT_IN_DUAL — host enum 17, firmware enum 17 */
+    { 17, 17 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_RAINBOW_MOVING_CHEVRON
-    18,
+    /* 17. RAINBOW_MOVING_CHEVRON — host enum 18, firmware enum 15 */
+    { 18, 15 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_CYCLE_PINWHEEL
-    19,
+    /* 18. CYCLE_PINWHEEL */
+    { 19, 18 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_CYCLE_SPIRAL
-    20,
+    /* 19. CYCLE_SPIRAL */
+    { 20, 19 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_DUAL_BEACON
-    21,
+    /* 20. DUAL_BEACON */
+    { 21, 20 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_RAINBOW_BEACON
-    22,
+    /* 21. RAINBOW_BEACON */
+    { 22, 21 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_RAINBOW_PINWHEELS
-    23,
+    /* 22. RAINBOW_PINWHEELS */
+    { 23, 22 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_RAINDROPS
-    24,
+    /* 23. RAINDROPS */
+    { 24, 23 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_JELLYBEAN_RAINDROPS
-    25,
+    /* 24. JELLYBEAN_RAINDROPS */
+    { 25, 24 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_HUE_BREATHING
-    26,
+    /* 25. HUE_BREATHING */
+    { 26, 25 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_HUE_PENDULUM
-    27,
+    /* 26. HUE_PENDULUM */
+    { 27, 26 },
 #endif
+
 #ifndef DISABLE_RGB_MATRIX_HUE_WAVE
-    28,
+    /* 27. HUE_WAVE */
+    { 28, 27 },
 #endif
+
+    /* PIXEL_RAIN (fw 28), PIXEL_FLOW (fw 29), PIXEL_FRACTAL (fw 30)    */
+    /* are OMITTED — the host has no constructor blocks for them.         */
+
 #if defined(RGB_MATRIX_FRAMEBUFFER_EFFECTS) && !defined(DISABLE_RGB_MATRIX_TYPING_HEATMAP)
-    29,
+    /* 28. TYPING_HEATMAP — host enum 29, firmware enum 31 (shifted +3) */
+    { 29, 31 },
 #endif
+
 #if defined(RGB_MATRIX_FRAMEBUFFER_EFFECTS) && !defined(DISABLE_RGB_MATRIX_DIGITAL_RAIN)
-    30,
+    /* 29. DIGITAL_RAIN — host enum 30, firmware enum 32 */
+    { 30, 32 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_REACTIVE_SIMPLE
-    31,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_REACTIVE_SIMPLE)
+    /* 30. SOLID_REACTIVE_SIMPLE */
+    { 31, 33 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_REACTIVE
-    32,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_REACTIVE)
+    /* 31. SOLID_REACTIVE */
+    { 32, 34 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_REACTIVE_WIDE
-    33,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_REACTIVE_WIDE)
+    /* 32. SOLID_REACTIVE_WIDE */
+    { 33, 35 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_REACTIVE_MULTIWIDE
-    34,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_REACTIVE_MULTIWIDE)
+    /* 33. SOLID_REACTIVE_MULTIWIDE */
+    { 34, 36 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_REACTIVE_CROSS
-    35,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_REACTIVE_CROSS)
+    /* 34. SOLID_REACTIVE_CROSS */
+    { 35, 37 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_REACTIVE_MULTICROSS
-    36,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_REACTIVE_MULTICROSS)
+    /* 35. SOLID_REACTIVE_MULTICROSS */
+    { 36, 38 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_REACTIVE_NEXUS
-    37,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_REACTIVE_NEXUS)
+    /* 36. SOLID_REACTIVE_NEXUS */
+    { 37, 39 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_REACTIVE_MULTINEXUS
-    38,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_REACTIVE_MULTINEXUS)
+    /* 37. SOLID_REACTIVE_MULTINEXUS */
+    { 38, 40 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SPLASH
-    39,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SPLASH)
+    /* 38. SPLASH */
+    { 39, 41 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_MULTISPLASH
-    40,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_MULTISPLASH)
+    /* 39. MULTISPLASH */
+    { 40, 42 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_SPLASH
-    41,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_SPLASH)
+    /* 40. SOLID_SPLASH */
+    { 41, 43 },
 #endif
-#if defined RGB_MATRIX_KEYREACTIVE_ENABLED && !defined DISABLE_RGB_MATRIX_SOLID_MULTISPLASH
-    42,
+
+#if defined(RGB_MATRIX_KEYREACTIVE_ENABLED) && !defined(DISABLE_RGB_MATRIX_SOLID_MULTISPLASH)
+    /* 41. SOLID_MULTISPLASH */
+    { 42, 44 },
 #endif
+
+    /* 42. OPENRGB_DIRECT — always last, always enabled */
+    { 1,  45 },
 };
+
+#define OPENRGB_MODE_MAP_SIZE (sizeof(openrgb_mode_map) / sizeof(openrgb_mode_map[0]))
+
 static uint8_t raw_hid_buffer[RAW_EPSIZE];
+
+/*
+ * Translate a host counter value (1-based) to a firmware rgb_matrix enum value.
+ * Returns 0 if the counter is out of range (0 == RGB_MATRIX_NONE).
+ */
+static uint8_t protocol_to_firmware_mode(uint8_t counter) {
+    if (counter < 1 || counter > OPENRGB_MODE_MAP_SIZE) {
+        return 0;
+    }
+    return openrgb_mode_map[counter - 1].firmware_value;
+}
+
+/*
+ * Translate a firmware rgb_matrix enum value back to the host counter value.
+ * Returns 0 if the firmware mode is not in the table (e.g. PIXEL effects).
+ */
+static uint8_t firmware_to_protocol_mode(uint8_t fw_mode) {
+    for (uint8_t i = 0; i < OPENRGB_MODE_MAP_SIZE; i++) {
+        if (openrgb_mode_map[i].firmware_value == fw_mode) {
+            return i + 1;  /* counter is 1-based */
+        }
+    }
+    return 0;
+}
 
 void raw_hid_receive(uint8_t *data, uint8_t length) {
     switch (*data) {
@@ -244,16 +408,19 @@ void openrgb_get_device_info(void) {
         current_byte++;
     }
 }
+
 void openrgb_get_mode_info(void) {
     const HSV hsv_color = rgb_matrix_get_hsv();
+    const uint8_t fw_mode = rgb_matrix_get_mode();
 
     raw_hid_buffer[0] = OPENRGB_GET_MODE_INFO;
-    raw_hid_buffer[1] = rgb_matrix_get_mode();
+    raw_hid_buffer[1] = firmware_to_protocol_mode(fw_mode);
     raw_hid_buffer[2] = rgb_matrix_get_speed();
     raw_hid_buffer[3] = hsv_color.h;
     raw_hid_buffer[4] = hsv_color.s;
     raw_hid_buffer[5] = hsv_color.v;
 }
+
 void openrgb_get_led_info(uint8_t *data) {
     const uint8_t first_led   = data[1];
     const uint8_t number_leds = data[2];
@@ -300,11 +467,11 @@ void openrgb_get_led_info(uint8_t *data) {
         }
     }
 }
+
 void openrgb_get_enabled_modes(void) {
     raw_hid_buffer[0] = OPENRGB_GET_ENABLED_MODES;
-    const uint8_t size = sizeof openrgb_rgb_matrix_effects_indexes / sizeof openrgb_rgb_matrix_effects_indexes[0];
-    for (int i = 0; i < size; i++) {
-        raw_hid_buffer[i + 1] = openrgb_rgb_matrix_effects_indexes[i];
+    for (uint8_t i = 0; i < OPENRGB_MODE_MAP_SIZE; i++) {
+        raw_hid_buffer[i + 1] = openrgb_mode_map[i].protocol_id;
     }
 }
 
@@ -314,22 +481,25 @@ void openrgb_set_mode(uint8_t *data) {
     const uint8_t v     = data[3];
     const uint8_t mode  = data[4];
     const uint8_t speed = data[5];
-    const uint8_t save = data[6];
+    const uint8_t save  = data[6];
 
     raw_hid_buffer[0] = OPENRGB_SET_MODE;
 
-    if (h > 255 || s > 255 || v > 255 || mode >= RGB_MATRIX_EFFECT_MAX || speed > 255) {
+    /* Translate host counter value to firmware enum value */
+    const uint8_t fw_mode = protocol_to_firmware_mode(mode);
+
+    if (h > 255 || s > 255 || v > 255 || fw_mode == 0 || fw_mode >= RGB_MATRIX_EFFECT_MAX || speed > 255) {
         raw_hid_buffer[RAW_EPSIZE - 2] = OPENRGB_FAILURE;
         return;
     }
 
     if (save == 1) {
-        rgb_matrix_mode(mode	);
+        rgb_matrix_mode(fw_mode);
         rgb_matrix_set_speed(speed);
         rgb_matrix_sethsv(h, s, v);
     }
     else {
-        rgb_matrix_mode_noeeprom( mode	);
+        rgb_matrix_mode_noeeprom(fw_mode);
         rgb_matrix_set_speed_noeeprom(speed);
         rgb_matrix_sethsv_noeeprom(h, s, v);
     }
